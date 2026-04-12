@@ -628,7 +628,7 @@ function getTodayStr() {
   const dy = String(d.getDate()).padStart(2,'0');
   return y+'-'+m+'-'+dy;
 }
-const STORE = 'gains_final_';
+const STORE = 'gains_v2_';
 function load(k,d){ try{ const v=localStorage.getItem(STORE+k); return v!==null?JSON.parse(v):d; }catch{ return d; } }
 function save(k,v){ try{ localStorage.setItem(STORE+k,JSON.stringify(v)); }catch{} }
 function clearAllData() {
@@ -799,23 +799,43 @@ function addMealEntry(slot, entry) {
 let _currentSlot = null;
 function openAddMeal(slot) {
   _currentSlot = slot;
-  const presets = getPresets(slot);
+  const defaults = DEFAULT_PRESETS[slot]||[];
+  const customs = state.customPresets[slot]||[];
+  const allPresets = [...defaults, ...customs];
   document.getElementById('preset-sheet-title').textContent = 'Add to '+SLOT_LABELS[slot];
   const list = document.getElementById('preset-list');
   list.innerHTML = '';
-  presets.forEach(p => {
+  allPresets.forEach((p, i) => {
+    const isCustom = i >= defaults.length;
+    const customIdx = i - defaults.length;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
     const btn = document.createElement('div');
     btn.className = 'snack-entry';
-    btn.style.marginBottom = '8px';
+    btn.style.cssText = 'flex:1;margin-bottom:0;';
     btn.innerHTML = `<div class="snack-info"><div class="snack-name">${p.name}</div><div class="snack-sub">${p.protein}g protein · ${p.kcal} kcal</div></div>
       <div class="snack-check" style="border-color:rgba(184,245,102,0.5)"><svg viewBox="0 0 12 12" fill="none" stroke="#b8f566" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;width:12px;height:12px"><path d="M2 6l3 3 5-5"/></svg></div>`;
     btn.onclick = () => { addMealEntry(slot,{name:p.name,protein:p.protein,carbs:p.carbs||0,fat:p.fat||0,kcal:p.kcal}); closeSheet('preset-sheet'); };
-    list.appendChild(btn);
+    row.appendChild(btn);
+    if (isCustom) {
+      const del = document.createElement('button');
+      del.style.cssText = 'flex-shrink:0;width:36px;height:36px;border-radius:50%;background:var(--danger-dim);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;';
+      del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="#f56666" stroke-width="2.5" stroke-linecap="round" style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      del.onclick = (e) => { e.stopPropagation(); deleteCustomPreset(slot, customIdx); };
+      row.appendChild(del);
+    }
+    list.appendChild(row);
   });
   const custom = document.createElement('div');
   custom.innerHTML = `<button class="add-meal-btn" style="width:100%;margin:0;border-radius:14px;padding:13px;border-style:dashed" onclick="closeSheet('preset-sheet');openCustomMealSheet('${slot}')"><span style="font-size:15px;line-height:1">+</span>&nbsp; Something else...</button>`;
   list.appendChild(custom);
   openSheet('preset-sheet');
+}
+
+function deleteCustomPreset(slot, idx) {
+  state.customPresets[slot].splice(idx, 1);
+  save('custompresets', state.customPresets);
+  openAddMeal(slot);
 }
 
 // --- CUSTOM MEAL SHEET ---
@@ -977,16 +997,26 @@ function renderSessionHistory() {
   }).join('');
 }
 
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dy = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+dy;
+}
+
 function renderWeekSummary() {
   const el = document.getElementById('week-summary');
-  const today = new Date(); const dow = today.getDay();
+  const today = new Date();
+  const dow = today.getDay();
+  const todayStr = getTodayStr();
   const days = ['S','M','T','W','T','F','S'];
   el.innerHTML = '';
   for (let i=0;i<7;i++) {
-    const d = new Date(today); d.setDate(today.getDate()-dow+i);
-    const ds = d.toISOString().slice(0,10);
+    const d = new Date(today);
+    d.setDate(today.getDate() - dow + i);
+    const ds = localDateStr(d);
     const session = state.sessions.find(s=>s.date===ds);
-    const isToday = i===dow;
+    const isToday = ds===todayStr;
     const div = document.createElement('div');
     div.className = 'week-day'+(session?' has-session':'')+(isToday?' is-today':'');
     div.innerHTML = `<div class="wd-name">${days[i]}</div><div class="wd-icon">${session?(SESSION_ICONS[session.type]||'✓'):''}</div><div class="wd-type">${session?session.type.slice(0,3).toUpperCase():'—'}</div>`;
